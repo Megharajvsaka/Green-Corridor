@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Green Corridor System — Bengaluru Emergency Response</title>
+  <meta name="description" content="Dynamic Green Corridor System for Emergency Vehicles in Bengaluru using real-time road routing and traffic signal management." />
+
+  <!-- Leaflet CSS MUST come before Leaflet JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #root { min-height: 100%; width: 100%; background: #020617; }
+
+    #map-container {
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+    }
+
+    /* Ambulance icon pulse animation */
+    .ambulance-icon {
+      font-size: 22px;
+      animation: ambulancePulse 1s ease-in-out infinite;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    @keyframes ambulancePulse {
+      0%, 100% { transform: scale(1); filter: brightness(1); }
+      50%       { transform: scale(1.25); filter: brightness(1.3); }
+    }
+
+    /* Hospital icon */
+    .hospital-icon {
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Corridor polyline pulse via CSS */
+    .corridor-line {
+      animation: corridorPulse 2s ease-in-out infinite;
+    }
+
+    @keyframes corridorPulse {
+      0%, 100% { opacity: 0.8; }
+      50%       { opacity: 0.4; }
+    }
+
+    /* Scrollbar styling */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: #1f2937; }
+    ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 2px; }
+    ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+
+    /* Leaflet popup tweaks */
+    .leaflet-popup-content-wrapper {
+      background: #1f2937;
+      color: #f9fafb;
+      border: 1px solid #374151;
+      border-radius: 8px;
+    }
+    .leaflet-popup-tip { background: #1f2937; }
+    .leaflet-popup-close-button { color: #9ca3af !important; }
+  </style>
+</head>
+<body class="bg-gray-900">
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+</html>
