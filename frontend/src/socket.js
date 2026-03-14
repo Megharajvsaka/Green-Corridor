@@ -1,7 +1,8 @@
-import { io } from 'socket.io-client';
+import { io } from "socket.io-client";
 
-// Singleton socket connection — created once, imported everywhere
-const socket = io('http://localhost:3001', {
+// backend URL on Render
+const socket = io("https://green-corridor.onrender.com", {
+  transports: ["websocket"],
   reconnection: true,
   reconnectionAttempts: 5,
   reconnectionDelay: 1000,
