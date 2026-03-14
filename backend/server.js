@@ -11,11 +11,21 @@ const mongoose = require('mongoose');
 const { Driver, Hospital, Emergency, Signal } = require('./models');
 
 const app = express();
-app.use(cors({ origin: '*' }));
+const allowedOrigin = process.env.CORS_ORIGIN || "http://localhost:5173";
+
+app.use(cors({
+  origin: allowedOrigin,
+  methods: ["GET", "POST"],
+  credentials: true
+}));
 
 const httpServer = http.createServer(app);
 const io = new Server(httpServer, {
-  cors: { origin: '*', methods: ['GET', 'POST'] },
+  cors: {
+    origin: allowedOrigin,
+    methods: ["GET", "POST"],
+    credentials: true
+  }
 });
 
 // ── 1. Constants ─────────────────────────────────────────────
@@ -39,13 +49,13 @@ const FALLBACK_HOSPITALS = [
 
 // ── 2. Distance Calc (Haversine) ─────────────────────────────
 function kmDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371; 
+  const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-            Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
 
@@ -60,8 +70,8 @@ async function getRealRoute(originLat, originLng, destLat, destLng) {
   } catch (err) {
     const steps = 30;
     const coords = Array.from({ length: steps }, (_, i) => ({
-      lat: originLat + (destLat - originLat) * (i / (steps-1)),
-      lng: originLng + (destLng - originLng) * (i / (steps-1)),
+      lat: originLat + (destLat - originLat) * (i / (steps - 1)),
+      lng: originLng + (destLng - originLng) * (i / (steps - 1)),
     }));
     return { coords, durationSeconds: Math.round(kmDistance(originLat, originLng, destLat, destLng) * 80) };
   }
@@ -105,37 +115,37 @@ async function runAIDispatcher(emergency) {
     const lat = h.location.coordinates[1];
     const lng = h.location.coordinates[0];
     const dist = kmDistance(emergency.location.coordinates[1], emergency.location.coordinates[0], lat, lng);
-    
-    const travelScore = Math.max(0, 100 - (dist * 10)); 
+
+    const travelScore = Math.max(0, 100 - (dist * 10));
     const loadScore = Math.min(100, (h.availableBeds / h.totalBeds) * 100);
-    const corridorScore = 70 + (Math.random() * 30); 
+    const corridorScore = 70 + (Math.random() * 30);
 
     const composite = (travelScore * 0.5) + (loadScore * 0.3) + (corridorScore * 0.2);
-    
-    return { 
-      hospital: h, 
+
+    return {
+      hospital: h,
       composite: Math.round(composite),
-      breakdown: { travelScore: Math.round(travelScore), loadScore: Math.round(loadScore), corridorScore: Math.round(corridorScore), availableBeds: h.availableBeds } 
+      breakdown: { travelScore: Math.round(travelScore), loadScore: Math.round(loadScore), corridorScore: Math.round(corridorScore), availableBeds: h.availableBeds }
     };
   });
 
   scores.sort((a, b) => b.composite - a.composite);
-  return scores[0]; 
+  return scores[0];
 }
 
 // ── 5. Main State Tick ──────────── (Legacy Simulation logic simplified)
 async function tick() {
   const activeEmergencies = await Emergency.find({ status: { $in: ['en_route', 'hospital_bound'] } });
   const updates = [];
-  
+
   for (const em of activeEmergencies) {
     if (!em.routeCoords || em.routeCoords.length === 0) continue;
-    
+
     const currentIndex = em.routeIndex || 0;
     // Step size 3 for a brisk but smooth movement (Zomato-style)
     const stepSize = 3;
     const nextIndex = Math.min(currentIndex + stepSize, em.routeCoords.length - 1);
-    
+
     await Emergency.updateOne({ _id: em._id }, { routeIndex: nextIndex });
 
     const currentCoord = em.routeCoords[nextIndex];
@@ -148,19 +158,19 @@ async function tick() {
     });
 
     if (nextIndex >= em.routeCoords.length - 1) {
-       if (em.status === 'en_route') {
-         await Emergency.updateOne({ _id: em._id }, { status: 'at_scene' });
-       } else if (em.status === 'hospital_bound') {
-         await Emergency.updateOne({ _id: em._id }, { status: 'completed' });
-         io.emit('patient_arrived', { emergencyId: em.id, ambulanceId: em.assignedAmbulanceId });
-       }
+      if (em.status === 'en_route') {
+        await Emergency.updateOne({ _id: em._id }, { status: 'at_scene' });
+      } else if (em.status === 'hospital_bound') {
+        await Emergency.updateOne({ _id: em._id }, { status: 'completed' });
+        io.emit('patient_arrived', { emergencyId: em.id, ambulanceId: em.assignedAmbulanceId });
+      }
     }
   }
 
   // Fetch all persistent signals for active missions
   const activeEmIds = activeEmergencies.map(e => e.id);
   const dbSignals = await Signal.find({ emergencyId: { $in: activeEmIds } });
-  
+
   const broadcastSignals = dbSignals.map(sig => {
     const em = activeEmergencies.find(e => e.id === sig.emergencyId);
     if (!em) return sig;
@@ -204,7 +214,7 @@ async function tick() {
     Driver.find({ status: { $ne: 'offline' } }),
     Hospital.find()
   ]);
-  
+
   const flattenLoc = (obj) => ({
     ...obj._doc,
     lat: obj.location.coordinates[1],
@@ -253,7 +263,7 @@ io.on('connection', (socket) => {
     try {
       const id = `SOS-${Date.now().toString().slice(-4)}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
       console.log(`[SOS] Incoming request for ${id} from session ${data.sessionId || 'UNKNOWN'}`);
-      
+
       const emergency = new Emergency({
         id,
         type: data.type,
@@ -325,12 +335,12 @@ io.on('connection', (socket) => {
   // 🚑 DRIVER REGISTER
   socket.on('driver_register', async (data) => {
     console.log(`[REGISTER] Driver: ${data.driverId} (Ambulance: ${data.ambulanceId})`);
-    socket.join('drivers'); 
+    socket.join('drivers');
     await Driver.findOneAndUpdate(
       { driverId: data.driverId },
-      { 
-        ...data, 
-        socketId: socket.id, 
+      {
+        ...data,
+        socketId: socket.id,
         status: 'available',
         location: { type: 'Point', coordinates: [data.lng, data.lat] },
         lastUpdate: new Date()
@@ -392,7 +402,7 @@ io.on('connection', (socket) => {
       );
 
       await Emergency.updateOne({ id: emergencyId }, { $set: { routeCoords: realRoute.coords } });
-      
+
       // Generate and persist signals for the route
       await generateSignalsForRoute(emergencyId, realRoute.coords, drv.ambulanceId);
 
@@ -429,7 +439,7 @@ io.on('connection', (socket) => {
       const route = await getRealRoute(em.location.coordinates[1], em.location.coordinates[0], hospital.location.coordinates[1], hospital.location.coordinates[0]);
       em.routeCoords = route.coords;
       em.routeIndex = 0;
-      
+
       // Clear old signals and generate new ones for the hospital route
       await Signal.deleteMany({ emergencyId });
       await generateSignalsForRoute(emergencyId, route.coords, em.assignedAmbulanceId);
@@ -447,7 +457,7 @@ io.on('connection', (socket) => {
       });
 
       const newSignals = await Signal.find({ emergencyId }).lean();
-      
+
       socket.emit('hospital_route_assigned', {
         hospital: { name: hospital.name, lat: hospital.location.coordinates[1], lng: hospital.location.coordinates[0] },
         routeCoords: route.coords,
@@ -472,31 +482,31 @@ io.on('connection', (socket) => {
 
   // 🏥 HOSPITAL READINESS ACK
   socket.on('hospital_ready_ack', async ({ hospitalId, emergencyId, message }) => {
-     console.log(`[HOSPITAL] Readiness confirmed for ${emergencyId} by ${hospitalId}`);
-     const em = await Emergency.findOne({ id: emergencyId });
-     if (em && em.assignedDriverId) {
-       const drv = await Driver.findOne({ driverId: em.assignedDriverId });
-       if (drv && drv.socketId) {
-         io.to(drv.socketId).emit('hospital_confirmed_ready', { message });
-       }
-     }
+    console.log(`[HOSPITAL] Readiness confirmed for ${emergencyId} by ${hospitalId}`);
+    const em = await Emergency.findOne({ id: emergencyId });
+    if (em && em.assignedDriverId) {
+      const drv = await Driver.findOne({ driverId: em.assignedDriverId });
+      if (drv && drv.socketId) {
+        io.to(drv.socketId).emit('hospital_confirmed_ready', { message });
+      }
+    }
   });
 
   // 🏁 MISSION COMPLETE
   socket.on('mission_complete', async ({ emergencyId, hospitalId }) => {
-     console.log(`[MISSION COMPLETE] Emergency ${emergencyId} arrived at Hospital ${hospitalId}`);
-     const em = await Emergency.findOne({ id: emergencyId });
-     if (em) {
-       em.status = 'completed';
-       await em.save();
-       const drv = await Driver.findOne({ driverId: em.assignedDriverId });
-       if (drv) {
-         await Driver.updateOne({ driverId: drv.driverId }, { status: 'available' });
-         if (drv.socketId) {
-           io.to(drv.socketId).emit('mission_complete_ack');
-         }
-       }
-     }
+    console.log(`[MISSION COMPLETE] Emergency ${emergencyId} arrived at Hospital ${hospitalId}`);
+    const em = await Emergency.findOne({ id: emergencyId });
+    if (em) {
+      em.status = 'completed';
+      await em.save();
+      const drv = await Driver.findOne({ driverId: em.assignedDriverId });
+      if (drv) {
+        await Driver.updateOne({ driverId: drv.driverId }, { status: 'available' });
+        if (drv.socketId) {
+          io.to(drv.socketId).emit('mission_complete_ack');
+        }
+      }
+    }
   });
 
   socket.on('disconnect', async () => {
@@ -531,7 +541,7 @@ async function start() {
   try {
     await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/greencorridor');
     console.log('✅ MongoDB Connected');
-    
+
     // Ensure Geospatial Indexes are built
     await Driver.createIndexes();
     await Emergency.createIndexes();
@@ -541,7 +551,7 @@ async function start() {
     await initHospitals();
 
     // 🧹 Clean start: remove old stale emergencies and reset drivers for fresh demo
-    const staleCleanup = await Emergency.deleteMany({ 
+    const staleCleanup = await Emergency.deleteMany({
       createdAt: { $lt: new Date(Date.now() - 10 * 60 * 1000) } // older than 10 min
     });
     if (staleCleanup.deletedCount > 0) {
