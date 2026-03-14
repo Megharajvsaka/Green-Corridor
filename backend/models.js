@@ -63,6 +63,7 @@ const emergencySchema = new mongoose.Schema({
     time: { type: Date, default: Date.now }
   }],
   routeCoords: Array,
+  sessionId: String,
   createdAt: { type: Date, default: Date.now }
 });
 
